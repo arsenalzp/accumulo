@@ -23,6 +23,7 @@ import static org.apache.accumulo.core.util.threads.ThreadPoolNames.BULK_IMPORT_
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
 
 import org.apache.accumulo.core.clientImpl.AcceptableThriftTableOperationException;
 import org.apache.accumulo.core.clientImpl.bulk.BulkSerialize;
@@ -33,6 +34,7 @@ import org.apache.accumulo.core.conf.Property;
 import org.apache.accumulo.core.fate.FateId;
 import org.apache.accumulo.core.fate.Repo;
 import org.apache.accumulo.core.manager.thrift.BulkImportState;
+import org.apache.accumulo.core.util.threads.ThreadPools;
 import org.apache.accumulo.manager.Manager;
 import org.apache.accumulo.manager.tableOps.ManagerRepo;
 import org.apache.accumulo.server.fs.VolumeManager;
@@ -99,6 +101,8 @@ class BulkImportMove extends ManagerRepo {
         "/" + bulkDir.getParent().getName() + "/" + bulkDir.getName(), fateId);
     AccumuloConfiguration aConf = manager.getConfiguration();
     int workerCount = aConf.getCount(Property.MANAGER_RENAME_THREADS);
+    ExecutorService workerPool = ThreadPools.getServerThreadPools()
+        .getPoolBuilder(BULK_IMPORT_DIR_MOVE_POOL.poolName).numCoreThreads(workerCount).build();
     Map<Path,Path> oldToNewMap = new HashMap<>();
 
     for (Map.Entry<String,String> renameEntry : renames.entrySet()) {
@@ -107,7 +111,7 @@ class BulkImportMove extends ManagerRepo {
       oldToNewMap.put(originalPath, newPath);
     }
     try {
-      fs.bulkRename(oldToNewMap, workerCount, BULK_IMPORT_DIR_MOVE_POOL.poolName, fateId);
+      fs.bulkRename(oldToNewMap, workerPool, fateId);
     } catch (IOException ioe) {
       throw new AcceptableThriftTableOperationException(bulkInfo.tableId.canonical(), null,
           TableOperation.BULK_IMPORT, TableOperationExceptionType.OTHER,
